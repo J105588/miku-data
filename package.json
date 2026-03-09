@@ -1,8 +1,15 @@
 {
     "name": "miku-sidebar",
     "displayName": "Miku Sidebar",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "publisher": "personal",
+    "description": "Miku sways her arms and follows your gaze in the VS Code sidebar.",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/J105588/miku-data.git"
+    },
+    "license": "MIT",
+    "homepage": "https://github.com/J105588/miku-data#readme",
     "engines": {
         "vscode": "^1.75.0"
     },
