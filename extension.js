@@ -107,7 +107,7 @@ function getHtmlContent() {
                         // ライブラリ独自の自動Idle再生はオフにするが、視線追及(autoInteract)はオンにする
                         model = await Live2DModel.from('${modelUrl}', {
                             idleMotionGroup: "OFF", // 存在しないグループ名を指定して無効化
-                            autoInteract: true      // マウス追随を有効化
+                            autoInteract: false     // 手動で制御するためOFFにする
                         });
                         
                         // 読み込み後、念の為内部設定も空にする
@@ -129,6 +129,29 @@ function getHtmlContent() {
                         
                         fitScale();
                         window.addEventListener('resize', fitScale);
+
+                        // 視線制御用の変数
+                        let targetFocusX = 0.5;
+                        let targetFocusY = 0.5;
+                        let currentFocusX = 0.5;
+                        let currentFocusY = 0.5;
+
+                        // マウス位置のリセット関数
+                        const setForwardFocus = () => {
+                            targetFocusX = 0.5;
+                            targetFocusY = 0.5;
+                        };
+
+                        // マウス追跡イベント
+                        window.addEventListener('pointermove', (e) => {
+                            targetFocusX = e.clientX / window.innerWidth;
+                            targetFocusY = e.clientY / window.innerHeight;
+                        });
+
+                        // より確実な離脱検知
+                        window.addEventListener('pointerleave', setForwardFocus);
+                        document.addEventListener('mouseleave', setForwardFocus);
+                        window.addEventListener('blur', setForwardFocus);
 
                         // 腕の物理シミュレーション用変数 (バネ・マス・ダンパ系)
                         let armPos = 0;
@@ -163,6 +186,11 @@ function getHtmlContent() {
 
                                 // 微細な呼吸の揺らぎ (1.5%程度の極微小なノイズ)
                                 const breathing = Math.sin(Date.now() / 2200) * 1.0;
+
+                                // 視線の滑らかな移動 (LERP)
+                                currentFocusX += (targetFocusX - currentFocusX) * 0.1;
+                                currentFocusY += (targetFocusY - currentFocusY) * 0.1;
+                                model.focus(currentFocusX * app.screen.width, currentFocusY * app.screen.height);
 
                                 // 最終的なパラメータ設定 (ミクの腕の可動域に合わせてスケーリング)
                                 // ParamArmL / ParamArmR に対して、計算した物理挙動を適用
