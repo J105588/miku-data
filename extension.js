@@ -130,6 +130,49 @@ function getHtmlContent() {
                         fitScale();
                         window.addEventListener('resize', fitScale);
 
+                        // 腕の物理シミュレーション用変数 (バネ・マス・ダンパ系)
+                        let armPos = 0;
+                        let armVel = 0;
+                        const stiffness = 0.15; // バネの強さ (戻る速さ)
+                        const damping = 0.8;    // 減衰 (揺れの収まりやすさ / 重さ)
+
+                        // 腕を動かすための設定 (Pixi.jsのTickerを使用)
+                        app.ticker.add(() => {
+                            if (model && model.internalModel) {
+                                const core = model.internalModel.coreModel;
+                                
+                                // 入力の統合: 体の回転(BodyAngleX)と頭の回転(AngleX)を組み合わせる
+                                // これにより、ミクが全体的にどこを向いているかを「重心」として捉える
+                                const targetX = (
+                                    core.getParameterValueById('ParamBodyAngleX') + 
+                                    core.getParameterValueById('ParamAngleX')
+                                ) * 0.5;
+
+                                // Z軸（傾き）の影響も加味
+                                const targetZ = (
+                                    core.getParameterValueById('ParamBodyAngleZ') + 
+                                    core.getParameterValueById('ParamAngleZ')
+                                ) * 0.5;
+                                
+                                // 2次遅れ系（物理シミュレーション）
+                                // 復元力 = -k * (現在の位置 - 目標位置)
+                                // 抵抗力 = -d * 速度
+                                const force = -stiffness * (armPos - (targetX + targetZ * 0.5)) - damping * armVel;
+                                armVel += force;
+                                armPos += armVel;
+
+                                // 微細な呼吸の揺らぎ (1.5%程度の極微小なノイズ)
+                                const breathing = Math.sin(Date.now() / 2200) * 1.0;
+
+                                // 最終的なパラメータ設定 (ミクの腕の可動域に合わせてスケーリング)
+                                // ParamArmL / ParamArmR に対して、計算した物理挙動を適用
+                                const finalArmValue = armPos * 0.6 + breathing;
+
+                                core.setParameterValueById('ParamArmL', finalArmValue);
+                                core.setParameterValueById('ParamArmR', -finalArmValue);
+                            }
+                        });
+
                         // カスタムタイマーを開始
                         resetAutoMotionTimer();
 
