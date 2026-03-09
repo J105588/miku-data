@@ -11,7 +11,7 @@ function activate(context) {
 }
 
 function getHtmlContent() {
-    const modelUrl = "https://raw.githubusercontent.com/iCharlesZ/vscode-live2d-models/master/model-library/miku/miku.model.json";
+    const modelUrl = "https://raw.githubusercontent.com/J105588/miku-data/main/miku_pro_jp/runtime/miku_sample_t04.model3.json";
 
     return `
         <!DOCTYPE html>
@@ -33,16 +33,17 @@ function getHtmlContent() {
                 }
             </style>
             
-            <script src="https://cdn.jsdelivr.net/gh/stevenjoezhang/live2d-widget/live2d.min.js"></script>
             <script src="https://cdn.jsdelivr.net/npm/pixi.js@6.5.2/dist/browser/pixi.min.js"></script>
-            <script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/cubism2.min.js"></script>
+            <script src="https://cdn.jsdelivr.net/gh/stevenjoezhang/live2d-widget/live2d.min.js"></script>
+            <script src="https://cdn.jsdelivr.net/npm/live2dcubismcore@1.0.2/live2dcubismcore.min.js"></script>
+            <script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/index.min.js"></script>
         </head>
         <body>
             <canvas id="canvas"></canvas>
             
             <script>
                 const { Application } = PIXI;
-                const { Live2DModel } = PIXI.live2d;
+                const Live2DModel = PIXI.live2d.Live2DModel;
 
                 const canvas = document.getElementById('canvas');
                 const app = new Application({
@@ -53,74 +54,91 @@ function getHtmlContent() {
                 });
 
                 let model;
-                let motionIndex = 0;
-                let autoMotionTimer; // 自動モーション用のタイマー変数
+                let autoMotionTimer;
+                let lastMotionGroup = "";
+                let lastExecTime = 0;
 
-                // 勝手に動く「気まぐれ」関数
-                function triggerRandomMotion() {
-                    if (!model || !model.internalModel) return;
+                // 利用可能なモーションから、前回と違うものをランダムに選ぶ
+                function getRandomMotionGroup(availableGroups) {
+                    if (availableGroups.length <= 1) return availableGroups[0];
+                    let nextGroup;
+                    do {
+                        nextGroup = availableGroups[Math.floor(Math.random() * availableGroups.length)];
+                    } while (nextGroup === lastMotionGroup);
+                    return nextGroup;
+                }
+
+                // モーション実行のコア関数
+                function playMotion(group, force = false) {
+                    const now = Date.now();
+                    // force=true（タップ等）の場合はガードを無視、それ以外は5秒ガードを適用
+                    if (!force && now - lastExecTime < 5000) return;
                     
-                    // 1〜6の中からランダムなモーションを選ぶ
-                    const randomMotion = Math.floor(Math.random() * 6) + 1;
-                    try {
-                        model.internalModel.motionManager.startMotion("null", randomMotion, 3);
-                        console.log("Auto Motion playing: " + randomMotion);
-                    } catch (e) {
-                        console.error("Auto Motion failed:", e);
+                    if (model && model.internalModel) {
+                        lastExecTime = now;
+                        lastMotionGroup = group;
+                        model.motion(group);
                     }
-                    
-                    // 次の自動モーションをセット
+                }
+
+                function triggerRandomMotion() {
+                    const motions = ["Idle", "Tap", "Flick", "FlickUp"];
+                    // 自動再生はガードあり
+                    playMotion(getRandomMotionGroup(motions), false);
                     resetAutoMotionTimer();
                 }
 
-                // タイマーをリセットして再設定する関数
                 function resetAutoMotionTimer() {
                     clearTimeout(autoMotionTimer);
-                    // 10秒〜20秒の間でランダムな時間を設定（ミリ秒）
+                    // 10秒〜20秒の間隔を厳密に生成
                     const nextTime = Math.random() * 10000 + 10000;
                     autoMotionTimer = setTimeout(triggerRandomMotion, nextTime);
                 }
 
+                function handleInteraction() {
+                    const interactiveMotions = ["Tap", "Flick", "FlickUp"];
+                    // 操作による反応はガードなしで即時実行
+                    playMotion(getRandomMotionGroup(interactiveMotions), true);
+                    resetAutoMotionTimer();
+                }
+
                 async function loadMiku() {
                     try {
-                        model = await Live2DModel.from('${modelUrl}');
+                        // ライブラリ独自の自動Idle再生はオフにするが、視線追及(autoInteract)はオンにする
+                        model = await Live2DModel.from('${modelUrl}', {
+                            idleMotionGroup: "OFF", // 存在しないグループ名を指定して無効化
+                            autoInteract: true      // マウス追随を有効化
+                        });
+                        
+                        // 読み込み後、念の為内部設定も空にする
+                        if (model.internalModel && model.internalModel.motionManager) {
+                            model.internalModel.motionManager.idleMotionGroup = undefined;
+                        }
+
                         app.stage.addChild(model);
 
                         const fitScale = () => {
                             model.scale.set(1);
                             const screenW = app.screen.width;
                             const screenH = app.screen.height;
-                            
                             const scale = Math.min(screenW / model.width, screenH / model.height) * 0.9;
                             model.scale.set(scale);
-                            
                             model.x = (screenW - model.width) / 2;
-                            // 画面の下端に合わせるなら以下のように調整（+20はモデルによる微調整）
                             model.y = (screenH - model.height) / 2; 
                         };
                         
                         fitScale();
                         window.addEventListener('resize', fitScale);
 
-                        // 読み込み完了と同時に、自動モーションのタイマーを起動
+                        // カスタムタイマーを開始
                         resetAutoMotionTimer();
 
-                        window.addEventListener('pointerdown', () => {
-                            if (!model || !model.internalModel) return;
-                            
-                            motionIndex = (motionIndex % 6) + 1;
-                            try {
-                                model.internalModel.motionManager.startMotion("null", motionIndex, 3);
-                            } catch (e) {
-                                console.error(e);
-                            }
-                            
-                            // ユーザーが構ってくれたら、自動モーションのタイマーをリセット（少し待つ）
-                            resetAutoMotionTimer();
-                        });
+                        // リスナーの登録（重複防止のため一度消してから登録）
+                        window.removeEventListener('pointerdown', handleInteraction);
+                        window.addEventListener('pointerdown', handleInteraction);
 
                     } catch (e) {
-                        console.error("Load Error:", e);
+                         console.error("Load Error:", e);
                     }
                 }
 

@@ -1,7 +1,7 @@
 {
-    "name": "antigravity-miku-sidebar",
+    "name": "miku-sidebar",
     "displayName": "Miku Sidebar",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "publisher": "personal",
     "engines": {
         "vscode": "^1.75.0"
